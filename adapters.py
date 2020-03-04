@@ -383,10 +383,14 @@ class GfycatResolver(SubmissionResolver):
     Args:
         video_extensions (list or tuple of str): sequence of known video
         extensions.
+
+        http_headers (dict): basic HTTP headers.
     """
 
-    def __init__(self, video_extensions=("mp4", "webp", "webm")):
-        super().__init__(video_extensions)
+    def __init__(self,
+                 video_extensions=("mp4", "webp", "webm"),
+                 http_headers=None):
+        super().__init__(video_extensions, http_headers)
         self.session.headers.update({"Host": "gfycat.com"})
 
     def parse(self, response):
@@ -439,12 +443,16 @@ class ImgurResolver(SubmissionResolver):
         media_extensions (list or tuple of str): collection of known media
         extensions.
 
+        http_headers (dict): basic HTTP headers.
+
     Attributes:
         session (requests.Session).
     """
 
-    def __init__(self, media_extensions=("mp4", "webp", "webm", "jpg", "jpeg", "png")):
-        super().__init__(media_extensions)
+    def __init__(self,
+                 media_extensions=("mp4", "webp", "webm", "jpg", "jpeg", "png"),
+                 http_headers=None):
+        super().__init__(media_extensions, http_headers)
         self.session.headers.update({"Host": "imgur.com"})
 
     def resolve(self, submission):
