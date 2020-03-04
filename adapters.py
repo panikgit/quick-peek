@@ -90,7 +90,10 @@ class SubredditIterator:
         if http_headers is None:
             http_headers = BROWSER_HEADERS
         self.session.headers.update(**http_headers, **{"Host": "old.reddit.com"})
-        self.load_submissions()
+        try:
+            self.load_submissions()
+        except self.NoSubmissionsAvailable:
+            pass
 
     def reset(self, subreddit_name):
         """
