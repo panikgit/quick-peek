@@ -1,4 +1,4 @@
-"""Non-API adapters to http resources: reddit.com, gfycat.com, imgur.com"""
+"""Non-API adapters to web resources: reddit.com, gfycat.com, imgur.com"""
 
 import abc
 import re
@@ -26,22 +26,23 @@ BROWSER_HEADERS = {
 class SubredditIterator:
     """old.reddit.com scraper
 
-    Implements iterator interface.
     Iterates over submissions of hot section of given subreddit.
-    Parses whole page at time.
+    Implements iterator interface.
+    Parses whole page at time and caches scraped submission related URLs.
 
     Class attributes:
-        class NoSubmissionsAvailable (Exception): main exception
-        caused by HTTPRequestsFailed or NoSubmissionsOnPage.
+        class NoSubmissionsAvailable (Exception): high-level exception.
+        Caused by low-level exceptions HTTPRequestsFailed, NoSubmissionsOnPage.
 
-        class HTTPRequestsFailed (Exception): raised on HTTP requests failure.
+        class HTTPRequestsFailed (Exception): raised if series of HTTP requests
+        of subreddit page fail.
 
-        class NoSubmissionsOnPage (Exception): raised if reddit page
+        class NoSubmissionsOnPage (Exception): raised if subreddit page
         has no submissions.
 
         REDDIT_URL (str): old.subreddit.com.
 
-        SUBMISSIONS_PER_PAGE (int): 25 submissions per page.
+        SUBMISSIONS_PER_PAGE (int): 25.
 
     Instance attributes:
         subreddit_url (str): https://old.reddit.com/r/<subreddit>.
@@ -59,22 +60,21 @@ class SubredditIterator:
     Args:
         subreddit_name (str): name of subreddit to browse.
 
-        http_headers (dict): HTTP session headers.
-        If not specified used BROWSER_HEADERS.
+        http_headers (dict): HTTP session headers. If not explicitly specified
+        used BROWSER_HEADERS.
     """
 
     class NoSubmissionsAvailable(Exception):
         """High-level exception
 
-        Causes StopIteration.
-        Caused by other internal exceptions.
+        Causes StopIteration. Caused by other internal exceptions.
         """
 
     class HTTPRequestsFailed(Exception):
-        """HTTP requests failed"""
+        pass
 
     class NoSubmissionsOnPage(Exception):
-        """No submissions on reddit page"""
+        pass
 
     REDDIT_URL = "https://old.reddit.com"
     SUBMISSIONS_PER_PAGE = 25
@@ -97,11 +97,11 @@ class SubredditIterator:
 
     def reset(self, subreddit_name):
         """
-        Clear state and assign /r/<subreddit_name>.
+        Clear internal state and assign /r/<subreddit_name>.
         HTTP session is untouched.
 
         Args:
-            subreddit_name (str): new subreddit to scrape.
+            subreddit_name (str): new subreddit to browse.
         """
         self.subreddit_url = self.REDDIT_URL + "/r/" + subreddit_name
         self.referer = ""
@@ -115,8 +115,14 @@ class SubredditIterator:
 
     def __next__(self):
         """
+        Get next cached submission related URLs.
+
         Returns:
-            SubmissionRL: parsed submission related URLs.
+            SubmissionRL: parsed submission related URLs encapsulated
+            in submission resource locator object.
+
+        Raises:
+            StopIteration: if NoSubmissionsAvailable is raised.
 
         Note:
             Internal state is unchanged on failure.
@@ -161,13 +167,18 @@ class SubredditIterator:
 
     def __request_next_page(self):
         """
-        Request next subreddit page.
+        Do series of requests of next subreddit page.
+
+        Note:
+            !Function retries request if response code is not 200.
+            !Function blocks between requests by time.sleep(interval).
+            Initially suggested interval=2s.
 
         Returns:
             requests.Response: HTTP response containing next subreddit page.
 
         Raises:
-            NoSubmissionsAvailable: HTTP requests failed.
+            HTTPRequestsFailed.
         """
         url = self.subreddit_url
         if self.count != 0:
@@ -211,7 +222,7 @@ class SubredditIterator:
             response (requests.Response): HTTP response containing subreddit page.
 
         Raises:
-            NoSubmissionsOnPage.
+            NoSubmissionsOnPage: if parsing failed.
         """
         parsed_submissions, last_submission_id = self.parse(response)
         if parsed_submissions is None:
@@ -228,7 +239,7 @@ class SubredditIterator:
     @staticmethod
     def parse(response):
         """
-        Parse subreddit page.
+        Scrape submitted URLs.
 
         Args:
             response (requests.Response): response with subreddit page.
@@ -263,7 +274,7 @@ class SubmissionResolver(abc.ABC):
        media files.
 
        Class attributes:
-            class HTTPRequestsFailed (Exception): raised if HTTP requests fail.
+            class HTTPRequestsFailed (Exception).
 
             class MediaIsUnavailable (Exception): high-level exception caused by
             other internal exceptions.
@@ -273,7 +284,7 @@ class SubmissionResolver(abc.ABC):
             external resource delivering submitted media.
 
             target_media_extensions (list or tuple of str): extensions of
-            wanted media file types.
+            wanted media files.
 
        Args:
             target_media_extensions (lits | tuple of str): collection
@@ -283,10 +294,10 @@ class SubmissionResolver(abc.ABC):
     """
 
     class HTTPRequestsFailed(Exception):
-        """HTTP requests fail"""
+        pass
 
     class MediaIsUnavailable(Exception):
-        """Universal exception raised in case if no requested media is found"""
+        """High-level exception raised in case if no requested media is found"""
 
     def __init__(self, target_media_extensions, http_headers=None):
         self.session = requests.Session()
@@ -296,15 +307,15 @@ class SubmissionResolver(abc.ABC):
         self.target_media_extensions = target_media_extensions
 
     def resolve(self, submission):
-        """
-        Replace submitted URL with direct URL of media file.
-        Replace other URLs accordingly.
+        """Main function
+        Replace submitted URLs with direct URL of media file.
+        Update other URLs accordingly.
 
         Args:
             submission (SubmissionRL): submission related URLs.
 
         Raises:
-            MediaIsUnavailable.
+            MediaIsUnavailable: if requests or parsing failed.
         """
         try:
             response = self.request_page(submission.url, submission.url_referer)
@@ -322,7 +333,12 @@ class SubmissionResolver(abc.ABC):
 
     def request_page(self, url_page, url_referer=None):
         """
-        Make several HTTP requests with given arguments.
+        Make several HTTP requests.
+
+        Note:
+            !Function retries request if response code is not 200.
+            !Function blocks between requests by time.sleep(interval).
+            Initially interval=1s.
 
         Args:
             url_page (str): URL of requested HTTP page.
@@ -333,7 +349,7 @@ class SubmissionResolver(abc.ABC):
             response (requests.Response): response with requested page.
 
         Raises:
-            HTTPRequestsFailed: if page is unavailable.
+            HTTPRequestsFailed.
         """
         referer_header = {"Referer": url_referer} if url_referer is not None else {}
         tries = 2
@@ -353,10 +369,12 @@ class SubmissionResolver(abc.ABC):
 
     @abc.abstractmethod
     def parse(self, response):
-        """Abstract method of page parsing
-        Parse requested page.
+        """Abstract method
+
+        Scrape URLs of media files.
+
         Args:
-            response (requests.Response): HTTP response with HTML page to be parsed.
+            response (requests.Response): HTTP response with HTML page.
 
         Returns:
             str: direct URL of submitted media file.
@@ -381,8 +399,7 @@ class GfycatResolver(SubmissionResolver):
         parse.
 
     Args:
-        video_extensions (list or tuple of str): sequence of known video
-        extensions.
+        video_extensions (list or tuple of str): known extensions.
 
         http_headers (dict): basic HTTP headers.
     """
@@ -440,8 +457,7 @@ class ImgurResolver(SubmissionResolver):
         parse.
 
     Args:
-        media_extensions (list or tuple of str): collection of known media
-        extensions.
+        media_extensions (list or tuple of str): known media extensions.
 
         http_headers (dict): basic HTTP headers.
 
@@ -457,8 +473,8 @@ class ImgurResolver(SubmissionResolver):
 
     def resolve(self, submission):
         """
-        Do nothing if URL has filename with media extension.
-        Use older version of imgur URLs to call parent's resolve.
+        Do nothing if URL has filename with known media extension.
+        Replace /gallery with /a in original indirect URL.
         Such an indirect URL concatenated with /zip points to submitted media.
 
         Args:
@@ -486,7 +502,6 @@ class ImgurResolver(SubmissionResolver):
         """
         Parse imgur page to obtain direct URL of submitted media and preview
         image if any.
-        Accept domains thumbs.gfycat.com or zippy.gfycat.com.
 
         Args:
             response (requests.Response): response containing imgur page.
@@ -530,13 +545,12 @@ class DirectURLResolver:
     Is intended for verification of direct URLs.
 
     Attributes:
-        target_media_extensions (list or tuple of str): collection of known media
-        extensions.
+        target_media_extensions (list or tuple of str): known media extensions.
 
     Args:
-        media_extensions (lits or tuple of str): collection
-        of file extensions without periods.
+        media_extensions (lits or tuple of str): file extensions without periods.
     """
+
     def __init__(self, media_extensions=("mp4", "webp", "webm", "jpg", "jpeg", "png")):
         self.target_media_extensions = media_extensions
 
