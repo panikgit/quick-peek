@@ -405,7 +405,7 @@ class GfycatResolver(SubmissionResolver):
     """
 
     def __init__(self,
-                 video_extensions=("mp4", "webp", "webm"),
+                 video_extensions=("mp4", "webm"),
                  http_headers=None):
         super().__init__(video_extensions, http_headers)
         self.session.headers.update({"Host": "gfycat.com"})
@@ -466,7 +466,8 @@ class ImgurResolver(SubmissionResolver):
     """
 
     def __init__(self,
-                 media_extensions=("mp4", "webp", "webm", "jpg", "jpeg", "png"),
+                 media_extensions=("mp4", "webm",
+                                   "jpg", "jpeg", "png", "gif", "webp"),
                  http_headers=None):
         super().__init__(media_extensions, http_headers)
         self.session.headers.update({"Host": "imgur.com"})
@@ -551,7 +552,10 @@ class DirectURLResolver:
         media_extensions (lits or tuple of str): file extensions without periods.
     """
 
-    def __init__(self, media_extensions=("mp4", "webp", "webm", "jpg", "jpeg", "png")):
+    def __init__(self,
+                 media_extensions=("mp4", "webm",
+                                   "jpg", "jpeg", "png", "gif", "webp")
+                ):
         self.target_media_extensions = media_extensions
 
     def resolve(self, submission):
