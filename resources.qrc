@@ -1,0 +1,10 @@
+<RCC>
+<qresource>
+	<file alias="play16">icons/play-16.png</file>
+	<file alias="pause16">icons/pause-16.png</file>
+	<file alias="play80">icons/play-80.png</file>
+	<file alias="speaker16">icons/speaker-16.png</file>
+	<file alias="speed16">icons/speed-16.png</file>
+</qresource>
+</RCC>
+
