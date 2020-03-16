@@ -10,3 +10,12 @@ Format determination is implemented trivially by checking of file name extension
 Supplied with standalone dump script.
 Provided dump functions are used for downloading or obtaining direct URLs of submitted media files
 and were designed primarily for testing of underlying non-API web access functionality.
+
+Requires | Tested version
+---------| -------------
+Python3 | 3.6
+PyQt5 | 5.10
+requests | 2.22
+beautifulsoup4 | 4.8
+lxml | 4.5
+python-vlc | 3.0
