@@ -1,15 +1,15 @@
 """Non-API adapters to web resources: reddit.com, gfycat.com, imgur.com"""
 
 import abc
+import os
 import re
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
 
 from submission import SubmissionRL
-
 
 BROWSER_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -196,7 +196,7 @@ class SubredditIterator:
                                               f", {response.url}")
             time.sleep(interval)
 
-        if urlparse(response.url).path.rsplit("/", maxsplit=1)[-1] == "over18":
+        if os.path.basename(urlparse(response.url).path) == "over18":
             time.sleep(interval)
             response = self.session.post(
                 response.url,
@@ -428,15 +428,13 @@ class GfycatResolver(SubmissionResolver):
         if video is None:
             return None, None
 
-        url_poster = video.attrs.get("poster")
         for source in video.find_all("source"):
-            url = source.attrs["src"]
-            url_parts = urlparse(url)
-            if (url_parts.netloc.startswith(("thumbs", "zippy"))
-                    and (url_parts.path.rsplit(".", maxsplit=1)[-1]
-                         in self.target_media_extensions)
-               ):
-                return url, url_poster
+            source_url = source.attrs["src"]
+            _, source_domain, source_path, *_ = urlparse(source_url)
+            if (source_domain.startswith(("thumbs", "zippy"))
+                    and (os.path.splitext(source_path)[1].lstrip(".")
+                         in self.target_media_extensions)):
+                return source_url, video.attrs.get("poster")
 
         return None, None
 
@@ -485,19 +483,17 @@ class ImgurResolver(SubmissionResolver):
             MediaIsUnavailable: imgur is unavailable or no media file
             with target media extension is found.
         """
-        url_parts = urlparse(submission.url)
-        if "." in url_parts.path.rsplit("/", maxsplit=1)[-1]:
-            ext = url_parts.path.rsplit(".", maxsplit=1)[-1]
-            if ext in self.target_media_extensions:
-                return
-
-            raise self.MediaIsUnavailable(f"Unknown media extension {ext}"
-                                          f", {submission.url}")
-
-        if url_parts.path.startswith("/gallery"):
-            submission.url = submission.url.replace("gallery", "a")
-
-        SubmissionResolver.resolve(self, submission)
+        ext = os.path.splitext(submission.url)[1].lstrip(".")
+        if ext:
+            if ext not in self.target_media_extensions:
+                raise self.MediaIsUnavailable(f"Unknown media extension {ext}"
+                                              f", {submission.url}")
+        else:
+            url_parts = urlparse(submission.url)
+            if url_parts.path.startswith("/gallery"):
+                url_parts.path.replace("gallery", "a", count=1)
+                submission.url = urlunparse(url_parts)
+            SubmissionResolver.resolve(self, submission)
 
     def parse(self, response):
         """
@@ -525,7 +521,7 @@ class ImgurResolver(SubmissionResolver):
             video = head.find("meta", {"property": "og:video"})
             if video is not None:
                 url_direct = video.attrs.get("content")
-                if (url_direct.rsplit(".", maxsplit=1)[-1]
+                if (os.path.splitext(url_direct)[1].lstrip(".")
                         not in self.target_media_extensions):
                     return None, None
 
@@ -566,11 +562,7 @@ class DirectURLResolver:
         Raises:
             SubmissionResolver.MediaIsUnavailable: extension is unknown.
         """
-        if "." not in urlparse(submission.url).path.rsplit("/", maxsplit=1)[-1]:
-            raise SubmissionResolver.MediaIsUnavailable(
-                f"Expected period in filename, {submission.url}")
-
-        ext = urlparse(submission.url).path.rsplit(".", maxsplit=1)[-1]
+        ext = os.path.splitext(urlparse(submission.url).path)[1].lstrip(".")
         if ext not in self.target_media_extensions:
             raise SubmissionResolver.MediaIsUnavailable(
-                f"Unknown media extension {ext}, {submission.url}")
+                f"Unknown file extension '{ext}' in {submission.url.split('?')[0]}")
