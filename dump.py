@@ -260,17 +260,16 @@ class SubmissionDownloader:
         Returns:
             bool: True if saved successfully, False otherwise.
         """
-        file_name = os.path.basename(urlparse(response.url).path)
-        file_path = self.outdir_path + "/" + file_name
-        if os.path.exists(file_path):
-            file_name_parts = file_name.rsplit(".", maxsplit=1)
-            file_name_parts[0] += "_copy"
-            file_path = self.outdir_path + "/" + ".".join(file_name_parts)
+        outfile_path = os.path.join(self.outdir_path,
+                                    os.path.basename(urlparse(response.url).path))
+        if os.path.exists(outfile_path):
+            root, ext = os.path.splitext(outfile_path) 
+            outfile_path = root + "_copy" + ext
         try:
-            with open(file_path, "wb") as outf:
+            with open(outfile_path, "wb") as outf:
                 outf.write(response.content)
         except FileNotFoundError:
-            print(f"Failed to save {file_path}")
+            print(f"Failed to save {outfile_path}")
             return False
 
         return True
